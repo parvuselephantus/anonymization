@@ -12,8 +12,98 @@
         .word { cursor: pointer; }
         .word.marked { background: yellow; }
         .sensitive-list { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
-        .sensitive-item { display: flex; gap: 10px; margin: 5px 0; align-items: center; }
+        .sensitive-item { 
+            display: flex; 
+            gap: 10px; 
+            margin: 5px 0; 
+            align-items: center;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        .sensitive-item:hover {
+            background: #f5f5f5;
+        }
         .sensitive-item input[type="text"] { width: 200px; padding: 5px; }
+        .pattern-type {
+            font-size: 0.8em;
+            color: #666;
+            font-style: italic;
+        }
+        .sensitive-word {
+            font-size: 1.1em;
+            font-weight: 500;
+        }
+        .delete-btn {
+            background: #ff4444;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+        .delete-btn:hover {
+            background: #cc0000;
+        }
+        .pattern-editor {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f8f8;
+            border-radius: 4px;
+        }
+        .pattern-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            position: relative;
+        }
+        .pattern-item label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .pattern-item input[type="text"] {
+            width: 100%;
+            padding: 5px;
+            margin-bottom: 10px;
+        }
+        .pattern-item textarea {
+            width: 100%;
+            height: 60px;
+            font-family: monospace;
+            margin-bottom: 10px;
+        }
+        .pattern-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .add-pattern-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 16px;
+            cursor: pointer;
+        }
+        .add-pattern-btn:hover {
+            background: #45a049;
+        }
+        .pattern-delete-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #ff4444;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+        .pattern-delete-btn:hover {
+            background: #cc0000;
+        }
     </style>
 </head>
 <body>
@@ -30,7 +120,16 @@
         </div>
 
         <div id="select-content" class="content">
-            <button onclick="autoDetect()">Auto-detect sensitive data</button>
+            <div class="pattern-controls">
+                <button onclick="autoDetect()" class="add-pattern-btn">Auto-detect sensitive data</button>
+                <button onclick="togglePatternEditor()" class="add-pattern-btn">Edit Detection Patterns</button>
+            </div>
+            <div id="pattern-editor" class="pattern-editor" style="display: none;">
+                <button onclick="addNewPattern()" class="add-pattern-btn">Add New Pattern</button>
+                <div id="patterns-list">
+                    <!-- Patterns will be inserted here dynamically -->
+                </div>
+            </div>
             <div id="text-display"></div>
             <div id="sensitive-list" class="sensitive-list"></div>
         </div>
@@ -51,21 +150,37 @@
         let sensitiveData = new Map();
         let showingOriginal = false;
 
+        // Initialize patterns as an array of objects
+        let patternsList = [
+            {
+                name: 'Email',
+                pattern: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}',
+                flags: 'g'
+            },
+            {
+                name: 'Phone',
+                pattern: '(\\+\\d{1,3}[-.]?)?\\(?\\d{3}\\)?[-.]?\\d{3}[-.]?\\d{4}',
+                flags: 'g'
+            },
+            {
+                name: 'Address',
+                pattern: '\\d+\\s+[A-Za-z\\s,]+(?:street|st|avenue|ave|road|rd|highway|hwy|square|sq|trail|trl|drive|dr|court|ct|parkway|pkwy|circle|cir|boulevard|blvd)\\W+',
+                flags: 'gi'
+            },
+            {
+                name: 'Name',
+                pattern: '\\b[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)+\\b',
+                flags: 'g'
+            }
+        ];
+
         // Names database for substitution
         const nameDb = {
-            name: ['Alex', 'Blair', 'Casey', 'Dana', 'Eden'],
             email: ['user1@example.com', 'user2@example.com'],
             phone: ['555-0101', '555-0102', '555-0103'],
             address: ['123 Oak St', '456 Maple Ave'],
+            name: ['Alex', 'Blair', 'Casey', 'Dana', 'Eden'],
             custom: ['Item1', 'Item2', 'Item3']
-        };
-
-        // Patterns for detection
-        const patterns = {
-            email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
-            phone: /(\+\d{1,3}[-.]?)?\(?\d{3}\)?[-.]?\d{3}[-.]?\d{4}/g,
-            address: /\d+\s+[A-Za-z\s,]+(?:street|st|avenue|ave|road|rd|highway|hwy|square|sq|trail|trl|drive|dr|court|ct|parkway|pkwy|circle|cir|boulevard|blvd)\W+/gi,
-            name: /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g
         };
 
         // Tab switching
@@ -79,6 +194,52 @@
             });
         });
 
+        function addNewPattern() {
+            patternsList.push({
+                name: 'New Pattern',
+                pattern: '\\b\\w+\\b',
+                flags: 'g'
+            });
+            updatePatternsUI();
+        }
+
+        function deletePattern(index) {
+            patternsList.splice(index, 1);
+            updatePatternsUI();
+        }
+
+        function updatePattern(index, field, value) {
+            patternsList[index][field] = value;
+        }
+
+        function updatePatternsUI() {
+            const container = document.getElementById('patterns-list');
+            container.innerHTML = patternsList.map((pattern, index) => `
+                <div class="pattern-item">
+                    <button class="pattern-delete-btn" onclick="deletePattern(${index})">Delete</button>
+                    <label>Pattern Name:</label>
+                    <input type="text" 
+                           value="${pattern.name}"
+                           onchange="updatePattern(${index}, 'name', this.value)">
+                    <label>Regular Expression:</label>
+                    <textarea onchange="updatePattern(${index}, 'pattern', this.value)">${pattern.pattern}</textarea>
+                    <label>Flags:</label>
+                    <input type="text" 
+                           value="${pattern.flags}"
+                           onchange="updatePattern(${index}, 'flags', this.value)">
+                </div>
+            `).join('');
+        }
+
+        function togglePatternEditor() {
+            const editor = document.getElementById('pattern-editor');
+            const isHidden = editor.style.display === 'none';
+            editor.style.display = isHidden ? 'block' : 'none';
+            if (isHidden) {
+                updatePatternsUI();
+            }
+        }
+
         // Input handling
         document.getElementById('input-text').addEventListener('input', (e) => {
             inputText = e.target.value;
@@ -90,9 +251,9 @@
         });
 
         function generateUniqueName(type) {
-            const names = nameDb[type] || nameDb.custom;
+            const names = nameDb[type.toLowerCase()] || nameDb.custom;
             const index = Array.from(sensitiveData.values())
-                .filter(item => item.type === type).length;
+                .filter(item => item.type.toLowerCase() === type.toLowerCase()).length;
             return names[index % names.length];
         }
 
@@ -103,24 +264,32 @@
                 sensitiveData.set(word, {
                     type: 'custom',
                     anonymized: generateUniqueName('custom'),
-                    selected: true
                 });
             }
             updateView();
         }
 
+        function deleteSensitiveItem(original) {
+            sensitiveData.delete(original);
+            updateView();
+        }
+
         function autoDetect() {
-            Object.entries(patterns).forEach(([type, pattern]) => {
-                const matches = Array.from(inputText.matchAll(pattern));
-                matches.forEach(match => {
-                    if (!sensitiveData.has(match[0])) {
-                        sensitiveData.set(match[0], {
-                            type,
-                            anonymized: generateUniqueName(type),
-                            selected: true
-                        });
-                    }
-                });
+            patternsList.forEach(({name, pattern, flags}) => {
+                try {
+                    const regex = new RegExp(pattern, flags);
+                    const matches = Array.from(inputText.matchAll(regex));
+                    matches.forEach(match => {
+                        if (!sensitiveData.has(match[0])) {
+                            sensitiveData.set(match[0], {
+                                type: name.toLowerCase(),
+                                anonymized: generateUniqueName(name),
+                            });
+                        }
+                    });
+                } catch (e) {
+                    console.error(`Invalid pattern ${name}:`, e);
+                }
             });
             updateView();
         }
@@ -138,20 +307,15 @@
             const list = document.getElementById('sensitive-list');
             list.innerHTML = Array.from(sensitiveData.entries()).map(([original, info]) => `
                 <div class="sensitive-item">
-                    <input type="checkbox" ${info.selected ? 'checked' : ''} 
-                        onchange="toggleSelection('${original.replace(/'/g, "\\'")}')">
-                    <span>${original}</span>
+                    <div>
+                        <span class="sensitive-word">${original}</span>
+                        <span class="pattern-type">(${info.type})</span>
+                    </div>
                     <input type="text" value="${info.anonymized}" 
                         onchange="updateAnonymized('${original.replace(/'/g, "\\'")}', this.value)">
-                    <span>${info.type}</span>
+                    <button class="delete-btn" onclick="deleteSensitiveItem('${original.replace(/'/g, "\\'")}')">Delete</button>
                 </div>
             `).join('');
-        }
-
-        function toggleSelection(original) {
-            const info = sensitiveData.get(original);
-            sensitiveData.set(original, { ...info, selected: !info.selected });
-            updateView();
         }
 
         function updateAnonymized(original, newValue) {
@@ -163,9 +327,7 @@
         function getAnonymizedText() {
             let text = inputText;
             for (const [original, info] of sensitiveData.entries()) {
-                if (info.selected) {
-                    text = text.replaceAll(original, info.anonymized);
-                }
+                text = text.replaceAll(original, info.anonymized);
             }
             return text;
         }
